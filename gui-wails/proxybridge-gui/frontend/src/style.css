@@ -1,0 +1,156 @@
+/* ProxyBridge GUI — Global Styles */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  /* Background */
+  --bg-primary: #0f1117;
+  --bg-secondary: #161921;
+  --bg-tertiary: #1c1f2e;
+  --bg-elevated: #222636;
+  --bg-hover: #2a2f45;
+  --bg-active: #2e3348;
+
+  /* Borders */
+  --border-subtle: #2a2d3e;
+  --border-default: #363b52;
+  --border-strong: #4a5073;
+
+  /* Text */
+  --text-primary: #e8eaf0;
+  --text-secondary: #9399b0;
+  --text-muted: #5c6380;
+  --text-disabled: #3d4260;
+
+  /* Action colors */
+  --color-proxy: #4ec9b0;
+  --color-direct: #9e9e9e;
+  --color-block: #f14c4c;
+  --color-proxy-bg: rgba(78, 201, 176, 0.12);
+  --color-direct-bg: rgba(158, 158, 158, 0.12);
+  --color-block-bg: rgba(241, 76, 76, 0.12);
+
+  /* Accent */
+  --accent-blue: #3b82f6;
+  --accent-blue-hover: #2563eb;
+  --accent-purple: #8b5cf6;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.6);
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+
+  /* Sidebar */
+  --sidebar-width: 220px;
+  --header-height: 52px;
+
+  /* Fonts */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #app {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+/* Selection */
+::selection { background: rgba(59, 130, 246, 0.3); color: var(--text-primary); }
+
+/* Focus */
+:focus-visible { outline: 2px solid var(--accent-blue); outline-offset: 2px; }
+
+/* Links */
+a { color: var(--accent-blue); text-decoration: none; }
+a:hover { color: var(--accent-blue-hover); }
+
+/* Buttons */
+button {
+  font-family: var(--font-sans);
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+/* Inputs */
+input, select, textarea {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent-blue);
+}
+
+input::placeholder { color: var(--text-muted); }
+
+/* Tables */
+table { border-collapse: collapse; width: 100%; }
+
+/* Tags / Badges */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.tag-proxy { background: var(--color-proxy-bg); color: var(--color-proxy); }
+.tag-direct { background: var(--color-direct-bg); color: var(--color-direct); }
+.tag-block { background: var(--color-block-bg); color: var(--color-block); }
+.tag-tcp { background: rgba(59, 130, 246, 0.12); color: #60a5fa; }
+.tag-udp { background: rgba(168, 85, 247, 0.12); color: #a78bfa; }
+
+/* Card */
+.card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 16px;
+}
+
+/* Utility */
+.mono { font-family: var(--font-mono); }
+.text-muted { color: var(--text-muted); }
+.text-secondary { color: var(--text-secondary); }
+.text-proxy { color: var(--color-proxy); }
+.text-direct { color: var(--color-direct); }
+.text-block { color: var(--color-block); }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
