@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './Rules.css';
 import { ProxyRule } from '../types';
 
@@ -8,66 +8,143 @@ interface RulesProps {
   onDeleteRule: (id: number) => void;
   onToggleRule: (id: number) => void;
   onEditRule: (rule: ProxyRule) => void;
+  prefillTemplate?: {
+    processName: string;
+    targetHosts: string;
+    targetPorts: string;
+    protocol: 'TCP' | 'UDP' | 'BOTH';
+    action: 'PROXY' | 'DIRECT' | 'BLOCK';
+  };
 }
 
-export function Rules({ rules, onAddRule, onDeleteRule, onToggleRule, onEditRule }: RulesProps) {
+export function Rules({
+  rules,
+  onAddRule,
+  onDeleteRule,
+  onToggleRule,
+  onEditRule,
+  prefillTemplate,
+}: RulesProps) {
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const formRef = useRef<HTMLDivElement>(null);
 
-  // Form state
   const [form, setForm] = useState({
-    processName: '',
+    processName: '*',
     targetHosts: '*',
     targetPorts: '*',
-    protocol: 'TCP' as const,
-    action: 'PROXY' as const,
+    protocol: 'TCP' as 'TCP' | 'UDP' | 'BOTH',
+    action: 'PROXY' as 'PROXY' | 'DIRECT' | 'BLOCK',
   });
 
-  const filtered = rules.filter((r) =>
-    r.processName.toLowerCase().includes(search.toLowerCase()) ||
-    r.targetHosts.toLowerCase().includes(search.toLowerCase())
-  );
+  // When parent pushes a prefill template, open and prefill the form
+  useEffect(() => {
+    if (prefillTemplate) {
+      setForm({
+        processName: prefillTemplate.processName || '*',
+        targetHosts: prefillTemplate.targetHosts || '*',
+        targetPorts: prefillTemplate.targetPorts || '*',
+        protocol: prefillTemplate.protocol || 'TCP',
+        action: prefillTemplate.action || 'PROXY',
+      });
+      setShowForm(true);
+      setEditingId(null);
+    }
+  }, [prefillTemplate]);
 
-  function handleAdd() {
-    if (!form.processName.trim()) return;
-    onAddRule({ ...form, enabled: true });
+  // Scroll form into view when it opens
+  useEffect(() => {
+    if (showForm && formRef.current) {
+      formRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [showForm]);
+
+  function openAddForm() {
     setForm({ processName: '', targetHosts: '*', targetPorts: '*', protocol: 'TCP', action: 'PROXY' });
-    setShowForm(false);
+    setEditingId(null);
+    setShowForm(true);
   }
+
+  function openEditForm(rule: ProxyRule) {
+    setForm({
+      processName: rule.processName,
+      targetHosts: rule.targetHosts,
+      targetPorts: rule.targetPorts,
+      protocol: rule.protocol,
+      action: rule.action,
+    });
+    setEditingId(rule.id);
+    setShowForm(true);
+  }
+
+  function handleSave() {
+    if (!form.processName.trim()) return;
+    if (editingId !== null) {
+      onEditRule({ id: editingId, ...form, enabled: rules.find((r) => r.id === editingId)?.enabled ?? true });
+    } else {
+      onAddRule({ ...form, enabled: true });
+    }
+    setShowForm(false);
+    setEditingId(null);
+  }
+
+  function handleClose() {
+    setShowForm(false);
+    setEditingId(null);
+  }
+
+  const filtered = rules.filter(
+    (r) =>
+      r.processName.toLowerCase().includes(search.toLowerCase()) ||
+      r.targetHosts.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <div className="rules-page">
+      {/* Toolbar */}
       <div className="rules-toolbar">
         <div className="rules-toolbar-left">
           <input
             className="search-input"
-            placeholder="Search rules..."
+            placeholder="Search rules…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+          {rules.length > 0 && (
+            <span className="conn-count">{filtered.length} / {rules.length}</span>
+          )}
         </div>
         <div className="rules-toolbar-right">
-          <button className="btn btn-secondary">Import</button>
-          <button className="btn btn-secondary">Export</button>
-          <button className="btn btn-primary" onClick={() => setShowForm(true)}>
+          <button className="btn btn-secondary btn-sm">Import</button>
+          <button className="btn btn-secondary btn-sm">Export</button>
+          <button className="btn btn-primary btn-sm" onClick={openAddForm}>
             + Add Rule
           </button>
         </div>
       </div>
 
+      {/* Slide-in Form Panel */}
       {showForm && (
-        <div className="card rule-form">
+        <div className="rule-form-panel" ref={formRef}>
+          <div className="rule-form-header">
+            <span className="rule-form-title">
+              {editingId !== null ? 'Edit Rule' : 'New Rule'}
+            </span>
+            <button className="rule-form-close" onClick={handleClose}>×</button>
+          </div>
           <div className="rule-form-grid">
             <div className="form-group">
-              <label>Process</label>
+              <label className="form-label">Process</label>
               <input
                 value={form.processName}
                 onChange={(e) => setForm({ ...form, processName: e.target.value })}
                 placeholder="e.g. chrome, *"
+                autoFocus
               />
             </div>
             <div className="form-group">
-              <label>Target Hosts</label>
+              <label className="form-label">Target Hosts</label>
               <input
                 value={form.targetHosts}
                 onChange={(e) => setForm({ ...form, targetHosts: e.target.value })}
@@ -75,7 +152,7 @@ export function Rules({ rules, onAddRule, onDeleteRule, onToggleRule, onEditRule
               />
             </div>
             <div className="form-group">
-              <label>Target Ports</label>
+              <label className="form-label">Target Ports</label>
               <input
                 value={form.targetPorts}
                 onChange={(e) => setForm({ ...form, targetPorts: e.target.value })}
@@ -83,10 +160,10 @@ export function Rules({ rules, onAddRule, onDeleteRule, onToggleRule, onEditRule
               />
             </div>
             <div className="form-group">
-              <label>Protocol</label>
+              <label className="form-label">Protocol</label>
               <select
                 value={form.protocol}
-                onChange={(e) => setForm({ ...form, protocol: e.target.value as any })}
+                onChange={(e) => setForm({ ...form, protocol: e.target.value as typeof form.protocol })}
               >
                 <option value="TCP">TCP</option>
                 <option value="UDP">UDP</option>
@@ -94,10 +171,10 @@ export function Rules({ rules, onAddRule, onDeleteRule, onToggleRule, onEditRule
               </select>
             </div>
             <div className="form-group">
-              <label>Action</label>
+              <label className="form-label">Action</label>
               <select
                 value={form.action}
-                onChange={(e) => setForm({ ...form, action: e.target.value as any })}
+                onChange={(e) => setForm({ ...form, action: e.target.value as typeof form.action })}
               >
                 <option value="PROXY">PROXY</option>
                 <option value="DIRECT">DIRECT</option>
@@ -106,17 +183,24 @@ export function Rules({ rules, onAddRule, onDeleteRule, onToggleRule, onEditRule
             </div>
           </div>
           <div className="rule-form-actions">
-            <button className="btn btn-secondary" onClick={() => setShowForm(false)}>Cancel</button>
-            <button className="btn btn-primary" onClick={handleAdd}>Save Rule</button>
+            <button className="btn btn-secondary btn-sm" onClick={handleClose}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={handleSave}>
+              {editingId !== null ? 'Update Rule' : 'Save Rule'}
+            </button>
           </div>
         </div>
       )}
 
+      {/* Rules Table */}
       <div className="rules-table-wrapper">
         {filtered.length === 0 ? (
           <div className="empty-state">
             <div className="empty-state-icon">⊞</div>
-            <div className="empty-state-text">No rules yet. Add one to get started.</div>
+            <div className="empty-state-text">
+              {rules.length === 0
+                ? 'No rules yet. Add one to get started.'
+                : 'No rules match your search.'}
+            </div>
           </div>
         ) : (
           <table className="rules-table">
@@ -159,7 +243,7 @@ export function Rules({ rules, onAddRule, onDeleteRule, onToggleRule, onEditRule
                   </td>
                   <td>
                     <div className="action-cell">
-                      <button className="action-btn" onClick={() => onEditRule(rule)}>Edit</button>
+                      <button className="action-btn" onClick={() => openEditForm(rule)}>Edit</button>
                       <button className="action-btn delete" onClick={() => onDeleteRule(rule.id)}>Del</button>
                     </div>
                   </td>

@@ -104,6 +104,12 @@ func (a *App) DeleteRule(ruleID uint32) bool {
 	return proxybridge.DeleteRule(ruleID)
 }
 
+func (a *App) EditRule(ruleID uint32, processName, targetHosts, targetPorts, protocol, action string) bool {
+	p := parseProtocol(protocol)
+	act := parseAction(action)
+	return proxybridge.EditRule(ruleID, processName, targetHosts, targetPorts, p, act)
+}
+
 func (a *App) GetRules() []map[string]interface{} {
 	rules := proxybridge.GetRules()
 	result := make([]map[string]interface{}, len(rules))

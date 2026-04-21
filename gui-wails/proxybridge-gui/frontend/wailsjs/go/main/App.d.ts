@@ -9,6 +9,8 @@ export function DeleteRule(arg1:number):Promise<boolean>;
 
 export function DisableRule(arg1:number):Promise<boolean>;
 
+export function EditRule(arg1:number,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<boolean>;
+
 export function EnableRule(arg1:number):Promise<boolean>;
 
 export function GetProxyConfig():Promise<Record<string, any>>;

@@ -1,6 +1,10 @@
 // proxybridge/proxybridge.go
-// Pure-Go implementation stubbing the ProxyBridge C core.
-// Real CGO binding replaces this file when core is compiled.
+// Stub implementation — GUI builds and runs with this.
+// Real CGO binding requires the C core to accept a void* userdata arg in callbacks
+// so Go can pass its function pointer through without cgo type restrictions.
+//
+// To build real binding: revert this to the CGO version once ProxyBridge.h is updated
+// to pass void* userdata through callbacks.
 package proxybridge
 
 import (
@@ -9,7 +13,8 @@ import (
 	"time"
 )
 
-// ProxyType matches ProxyBridge.h
+// ─── Types ───────────────────────────────────────────────────────────────────
+
 type ProxyType int
 
 const (
@@ -17,7 +22,15 @@ const (
 	ProxyTypeSOCKS5 ProxyType = 1
 )
 
-// RuleAction matches ProxyBridge.h
+func (p ProxyType) String() string {
+	switch p {
+	case ProxyTypeSOCKS5:
+		return "SOCKS5"
+	default:
+		return "HTTP"
+	}
+}
+
 type RuleAction int
 
 const (
@@ -26,7 +39,6 @@ const (
 	RuleActionBlock  RuleAction = 2
 )
 
-// RuleProtocol matches ProxyBridge.h
 type RuleProtocol int
 
 const (
@@ -35,7 +47,6 @@ const (
 	RuleProtocolBoth RuleProtocol = 2
 )
 
-// ProxyConfig matches the UI's ProxyConfig type
 type ProxyConfig struct {
 	Type     ProxyType
 	Host     string
@@ -44,18 +55,16 @@ type ProxyConfig struct {
 	Password string
 }
 
-// ProxyRule matches the UI's ProxyRule type
 type ProxyRule struct {
-	ID           uint32
-	ProcessName  string
-	TargetHosts  string
-	TargetPorts  string
-	Protocol     RuleProtocol
-	Action       RuleAction
-	Enabled      bool
+	ID          uint32
+	ProcessName string
+	TargetHosts string
+	TargetPorts string
+	Protocol    RuleProtocol
+	Action      RuleAction
+	Enabled     bool
 }
 
-// ConnectionInfo mirrors the real callback data
 type ConnectionInfo struct {
 	ProcessName string
 	PID         uint32
@@ -66,21 +75,16 @@ type ConnectionInfo struct {
 	Timestamp   time.Time
 }
 
-// LogCallback is called by the core for log messages
 type LogCallback func(msg string)
-
-// ConnectionCallback is called by the core for each connection event
 type ConnectionCallback func(info ConnectionInfo)
 
-// Bridge is the main ProxyBridge control interface.
-// In production, this delegates to the compiled C core via CGO.
-// In this stub, it generates simulated realistic traffic.
-type Bridge struct {
-	mu      sync.RWMutex
-	running bool
+// ─── Bridge ──────────────────────────────────────────────────────────────────
 
-	config     ProxyConfig
-	rules      map[uint32]ProxyRule
+type Bridge struct {
+	mu       sync.RWMutex
+	running  bool
+	config   ProxyConfig
+	rules    map[uint32]ProxyRule
 	nextRuleID uint32
 
 	logCallback       LogCallback
@@ -88,98 +92,109 @@ type Bridge struct {
 
 	stopCh chan struct{}
 
-	// stats
-	totalConn    uint64
-	proxyConn    uint64
-	directConn   uint64
-	blockConn    uint64
-	startTime    time.Time
+	totalConn  uint64
+	proxyConn  uint64
+	directConn uint64
+	blockConn  uint64
+	startTime  time.Time
 }
 
-var (
-	defaultBridge = &Bridge{}
-)
+var defaultBridge = &Bridge{
+	rules: make(map[uint32]ProxyRule),
+}
 
-// SetLogCallback registers a callback for log messages
+// ─── Exported API ───────────────────────────────────────────────────────────
+
 func SetLogCallback(cb LogCallback) {
 	defaultBridge.mu.Lock()
 	defaultBridge.logCallback = cb
 	defaultBridge.mu.Unlock()
 }
 
-// SetConnectionCallback registers a callback for connection events
 func SetConnectionCallback(cb ConnectionCallback) {
 	defaultBridge.mu.Lock()
 	defaultBridge.connectionCallback = cb
 	defaultBridge.mu.Unlock()
 }
 
-// SetProxyConfig configures the upstream proxy
 func SetProxyConfig(config ProxyConfig) bool {
 	defaultBridge.mu.Lock()
+	defer defaultBridge.mu.Unlock()
 	defaultBridge.config = config
-	defaultBridge.mu.Unlock()
-	defaultBridge.log("Proxy config updated: %s://%s:%d", config.Type, config.Host, config.Port)
+	defaultBridge.log("Proxy config updated: %s://%s:%d", config.Type.String(), config.Host, config.Port)
 	return true
 }
 
-// AddRule adds a routing rule
 func AddRule(processName, targetHosts, targetPorts string, protocol RuleProtocol, action RuleAction) uint32 {
 	defaultBridge.mu.Lock()
-	defer defaultBridge.mu.Unlock()
-
 	id := defaultBridge.nextRuleID
 	defaultBridge.nextRuleID++
-	defaultBridge.rules[id] = ProxyRule{
-		ID:          id,
-		ProcessName: processName,
-		TargetHosts: targetHosts,
-		TargetPorts: targetPorts,
-		Protocol:    protocol,
-		Action:      action,
-		Enabled:     true,
+	rule := ProxyRule{
+		ID: id, ProcessName: processName,
+		TargetHosts: targetHosts, TargetPorts: targetPorts,
+		Protocol: protocol, Action: action, Enabled: true,
 	}
-	defaultBridge.log("Rule added: [%d] %s %s:%s %v → %v", id, processName, targetHosts, targetPorts, protocol, action)
+	defaultBridge.rules[id] = rule
+	// Unlock before logging — log() also needs the lock.
+	defaultBridge.mu.Unlock()
+	defaultBridge.log("Rule added: [%d] %s %s:%s %v → %v",
+		id, processName, targetHosts, targetPorts, protocol, action)
 	return id
 }
 
-// EnableRule enables/disables a rule
 func EnableRule(ruleID uint32) bool {
 	defaultBridge.mu.Lock()
 	defer defaultBridge.mu.Unlock()
-	if rule, ok := defaultBridge.rules[ruleID]; ok {
-		rule.Enabled = true
-		defaultBridge.rules[ruleID] = rule
+	if r, ok := defaultBridge.rules[ruleID]; ok {
+		r.Enabled = true
+		defaultBridge.rules[ruleID] = r
 		return true
 	}
 	return false
 }
 
-// DisableRule disables a rule
 func DisableRule(ruleID uint32) bool {
 	defaultBridge.mu.Lock()
 	defer defaultBridge.mu.Unlock()
-	if rule, ok := defaultBridge.rules[ruleID]; ok {
-		rule.Enabled = false
-		defaultBridge.rules[ruleID] = rule
+	if r, ok := defaultBridge.rules[ruleID]; ok {
+		r.Enabled = false
+		defaultBridge.rules[ruleID] = r
 		return true
 	}
 	return false
 }
 
-// DeleteRule removes a rule
+func EditRule(ruleID uint32, processName, targetHosts, targetPorts string, protocol RuleProtocol, action RuleAction) bool {
+	defaultBridge.mu.Lock()
+	if r, ok := defaultBridge.rules[ruleID]; ok {
+		r.ProcessName = processName
+		r.TargetHosts = targetHosts
+		r.TargetPorts = targetPorts
+		r.Protocol = protocol
+		r.Action = action
+		defaultBridge.rules[ruleID] = r
+		defaultBridge.mu.Unlock()
+		defaultBridge.log("Rule edited: [%d] %s %s:%s %v → %v",
+			ruleID, processName, targetHosts, targetPorts, protocol, action)
+		return true
+	}
+	defaultBridge.mu.Unlock()
+	return false
+}
+
 func DeleteRule(ruleID uint32) bool {
 	defaultBridge.mu.Lock()
-	defer defaultBridge.mu.Unlock()
-	if _, ok := defaultBridge.rules[ruleID]; ok {
+	_, ok := defaultBridge.rules[ruleID]
+	if ok {
 		delete(defaultBridge.rules, ruleID)
+		defaultBridge.mu.Unlock()
 		defaultBridge.log("Rule deleted: [%d]", ruleID)
 		return true
 	}
+	defaultBridge.mu.Unlock()
 	return false
 }
 
-// GetRules returns all rules
 func GetRules() []ProxyRule {
 	defaultBridge.mu.RLock()
 	defer defaultBridge.mu.RUnlock()
@@ -190,7 +205,6 @@ func GetRules() []ProxyRule {
 	return rules
 }
 
-// Start begins traffic interception
 func Start() bool {
 	defaultBridge.mu.Lock()
 	if defaultBridge.running {
@@ -207,7 +221,6 @@ func Start() bool {
 	return true
 }
 
-// Stop halts traffic interception
 func Stop() bool {
 	defaultBridge.mu.Lock()
 	if !defaultBridge.running {
@@ -222,21 +235,19 @@ func Stop() bool {
 	return true
 }
 
-// IsRunning returns the current running state
 func IsRunning() bool {
 	defaultBridge.mu.RLock()
 	defer defaultBridge.mu.RUnlock()
 	return defaultBridge.running
 }
 
-// GetStats returns connection statistics
 func GetStats() (total, proxy, direct, blocked uint64) {
 	defaultBridge.mu.RLock()
 	defer defaultBridge.mu.RUnlock()
-	return defaultBridge.totalConn, defaultBridge.proxyConn, defaultBridge.directConn, defaultBridge.blockConn
+	return defaultBridge.totalConn, defaultBridge.proxyConn,
+		defaultBridge.directConn, defaultBridge.blockConn
 }
 
-// GetUptime returns the time since Start() was called
 func GetUptime() string {
 	defaultBridge.mu.RLock()
 	defer defaultBridge.mu.RUnlock()
@@ -256,7 +267,6 @@ func GetUptime() string {
 	return fmt.Sprintf("%ds", s)
 }
 
-// TestConnection attempts a test connection to target
 func TestConnection(targetHost string, targetPort uint16) string {
 	defaultBridge.mu.RLock()
 	config := defaultBridge.config
@@ -265,42 +275,31 @@ func TestConnection(targetHost string, targetPort uint16) string {
 	if config.Host == "" {
 		return "No proxy configured"
 	}
-	// Simulate test — in real impl this opens a real socket
 	time.Sleep(200 * time.Millisecond)
-	return fmt.Sprintf("OK via %s://%s:%d → %s:%d", config.Type, config.Host, config.Port, targetHost, targetPort)
+	return fmt.Sprintf("OK via %s://%s:%d → %s:%d",
+		config.Type.String(), config.Host, config.Port, targetHost, targetPort)
 }
 
-// --- internal helpers ---
+// ─── Internal ────────────────────────────────────────────────────────────────
 
 func (b *Bridge) log(format string, args ...interface{}) {
+	text := fmt.Sprintf(format, args...)
 	b.mu.RLock()
 	cb := b.logCallback
 	b.mu.RUnlock()
-	if cb == nil {
-		return
+	if cb != nil {
+		cb(text)
 	}
-	cb(fmt.Sprintf(format, args...))
 }
 
-func (b *Bridge) emitConnection(info ConnectionInfo) {
-	b.mu.RLock()
-	cb := b.connectionCallback
-	b.mu.RUnlock()
-	if cb == nil {
-		return
-	}
-	cb(info)
-}
-
-// trafficSimulator generates realistic mock traffic for demo purposes.
-// Replaced by real ProxyBridge core in production.
 func (b *Bridge) trafficSimulator() {
-	processes := []string{"chrome.exe", "firefox.exe", "slack.exe", "teams.exe", "curl", "wget", "ssh", "curl"}
-	hosts := []string{"api.stripe.com", "www.google.com", "github.com", "slack.com", "teams.microsoft.com", "cloudflare.com", "discord.com", "1.1.1.1"}
+	processes := []string{"chrome.exe", "firefox.exe", "slack.exe", "teams.exe", "curl", "wget", "ssh"}
+	hosts := []string{"api.stripe.com", "www.google.com", "github.com", "slack.com",
+		"teams.microsoft.com", "cloudflare.com", "discord.com", "1.1.1.1"}
 	ports := []uint16{443, 80, 8080, 22, 3000, 8443}
 	actions := []RuleAction{RuleActionProxy, RuleActionProxy, RuleActionProxy, RuleActionDirect, RuleActionBlock}
 
-	ticker := time.NewTicker(400 * time.Millisecond)
+	ticker := time.NewTicker(800 * time.Millisecond)
 	defer ticker.Stop()
 
 	idx := 0
@@ -342,10 +341,15 @@ func (b *Bridge) trafficSimulator() {
 				DestIP:      host,
 				DestPort:    port,
 				Action:      action,
-				ProxyInfo:   fmt.Sprintf("%s://%s:%d", config.Type, config.Host, config.Port),
+				ProxyInfo:   fmt.Sprintf("%s://%s:%d", config.Type.String(), config.Host, config.Port),
 				Timestamp:   time.Now(),
 			}
-			b.emitConnection(info)
+			b.mu.RLock()
+			cb := b.connectionCallback
+			b.mu.RUnlock()
+			if cb != nil {
+				cb(info)
+			}
 		}
 	}
 }

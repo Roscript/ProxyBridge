@@ -18,6 +18,10 @@ export function DisableRule(arg1) {
   return window['go']['main']['App']['DisableRule'](arg1);
 }
 
+export function EditRule(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['EditRule'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
 export function EnableRule(arg1) {
   return window['go']['main']['App']['EnableRule'](arg1);
 }
