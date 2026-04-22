@@ -77,10 +77,16 @@ jobs:
           CGO_CFLAGS: "-ID:/a/ProxyBridge/ProxyBridge/gui-wails/proxybridge-gui/proxybridge/WinDivert/include"
           GOOS: windows
           GOARCH: amd64
-          Path: "C:/msys64/mingw64/bin;C:/Users/runneradmin/go/bin;C:/Windows/System32;$env:Path"
         run: |
+          # Install wails if not present in GOPATH
+          $wailsExe = Join-Path (go env GOPATH) "bin\wails.exe"
+          if (-not (Test-Path $wailsExe)) {
+            go install github.com/wailsapp/wails/cmd/wails@v2
+          }
+          # Add GOPATH/bin and MSYS2 mingw64/bin to PATH for this step
+          $env:Path = "C:\msys64\mingw64\bin;" + (go env GOPATH) + "\bin;" + $env:Path
           cd D:\a\ProxyBridge\ProxyBridge\gui-wails\proxybridge-gui
-          go run github.com/wailsapp/wails/cmd/wails@v2 build --platform windows/amd64 --windowsmanifest proxybridge-gui.manifest
+          & (go env GOPATH)\bin\wails.exe build --platform windows/amd64 --windowsmanifest proxybridge-gui.manifest
           Write-Host "Build output:"
           Get-ChildItem build/bin | ForEach-Object { Write-Host "  $($_.Name) ($([math]::Round($_.Length/1MB,2)) MB)" }
 
