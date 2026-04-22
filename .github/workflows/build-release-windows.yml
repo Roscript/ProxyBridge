@@ -120,7 +120,7 @@ jobs:
           cp build-dll/ProxyBridgeCore.dll dll-staging/
           cp build-dll/libProxyBridgeCore.a dll-staging/
           cp /tmp/WinDivert/WinDivert-2.2.2-A/x64/WinDivert.dll dll-staging/
-          cp /tmp/WinDivert/WinDivert-2.2.2-A/x64/WinDivert.sys dll-staging/
+          cp /tmp/WinDivert/WinDivert-2.2.2-A/x64/WinDivert64.sys dll-staging/
           cp /tmp/libWinDivert.a dll-staging/
 
       - name: Upload DLL artifact
@@ -251,7 +251,7 @@ jobs:
 
           # WinDivert runtime
           Copy-Item "C:\WinDivert-2.2.2-A\x64\WinDivert.dll" $outDir -Force
-          Get-ChildItem "C:\WinDivert-2.2.2-A\x64\*.sys" | ForEach-Object {
+          Get-ChildItem "C:\WinDivert-2.2.2-A\x64\WinDivert64.sys" | ForEach-Object {
             Copy-Item $_.FullName $outDir -Force
           }
 
