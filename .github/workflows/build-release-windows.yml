@@ -45,7 +45,12 @@ jobs:
           sudo apt-get install -y -qq mingw-w64 nsis
 
       - name: Install Wails
-        run: go install github.com/wailsapp/wails/cmd/wails@v2
+        run: |
+          curl -sL "https://github.com/wailsapp/wails/releases/download/v2.8.2/wails-v2.8.2-linux-amd64.tar.gz" -o /tmp/wails.tar.gz
+          tar -xzf /tmp/wails.tar.gz -C /tmp
+          mv /tmp/wails-v2.8.2-linux-amd64/wails /usr/local/bin/
+          chmod +x /usr/local/bin/wails
+          wails version
 
       - name: Cache npm
         uses: actions/cache@v4
