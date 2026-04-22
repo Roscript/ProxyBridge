@@ -40,30 +40,16 @@ jobs:
 
       - name: Create WinDivert.def (manual, from header)
         run: |
-          cat > /tmp/windivert.def << 'EOF'
-LIBRARY WinDivert.dll
-EXPORTS
-WinDivertOpen
-WinDivertClose
-WinDivertSend
-WinDivertRecv
-WinDivertRecvEx
-WinDivertSendEx
-WinDivertSetParam
-WinDivertGetParam
-WinDivertHelperInit
-WinDivertHelperHashPacket
-WinDivertHelperParsePacket
-WinDivertHelperUnparsePacket
-WinDivertHelperCheckPacket
-WinDivertHelperDecrypt
-WinDivertHelperEncrypt
-WinDivertHelperExtractTLV
-WinDivertHelperInjectTLV
-WinDivertHelperCalcChecksum
-WinDivertHelperNTOH
-WinDivertHelperHTON
-EOF
+          printf '%s\n' 'LIBRARY WinDivert.dll' 'EXPORTS' \
+            'WinDivertOpen' 'WinDivertClose' 'WinDivertSend' 'WinDivertRecv' \
+            'WinDivertRecvEx' 'WinDivertSendEx' 'WinDivertSetParam' \
+            'WinDivertGetParam' 'WinDivertHelperInit' 'WinDivertHelperHashPacket' \
+            'WinDivertHelperParsePacket' 'WinDivertHelperUnparsePacket' \
+            'WinDivertHelperCheckPacket' 'WinDivertHelperDecrypt' \
+            'WinDivertHelperEncrypt' 'WinDivertHelperExtractTLV' \
+            'WinDivertHelperInjectTLV' 'WinDivertHelperCalcChecksum' \
+            'WinDivertHelperNTOH' 'WinDivertHelperHTON' \
+            > /tmp/windivert.def
           echo "=== WinDivert.def created ==="
           cat /tmp/windivert.def
 
@@ -93,25 +79,16 @@ EOF
       - name: Create ProxyBridgeCore.def
         run: |
           # ProxyBridge.h is the source of truth for exported functions
-          cat > build-dll/ProxyBridgeCore.def << 'EOF'
-LIBRARY ProxyBridgeCore.dll
-EXPORTS
-ProxyBridge_Activate
-ProxyBridge_Deactivate
-ProxyBridge_SetLogCallback
-ProxyBridge_SetConnectionCallback
-ProxyBridge_SetProxyConfig
-ProxyBridge_AddRule
-ProxyBridge_EnableRule
-ProxyBridge_DisableRule
-ProxyBridge_EditRule
-ProxyBridge_DeleteRule
-ProxyBridge_GetRules
-ProxyBridge_IsRunning
-ProxyBridge_GetStats
-ProxyBridge_GetUptime
-ProxyBridge_TestConnection
-EOF
+          printf '%s\n' 'LIBRARY ProxyBridgeCore.dll' 'EXPORTS' \
+            'ProxyBridge_Activate' 'ProxyBridge_Deactivate' \
+            'ProxyBridge_SetLogCallback' 'ProxyBridge_SetConnectionCallback' \
+            'ProxyBridge_SetProxyConfig' 'ProxyBridge_AddRule' \
+            'ProxyBridge_EnableRule' 'ProxyBridge_DisableRule' \
+            'ProxyBridge_EditRule' 'ProxyBridge_DeleteRule' \
+            'ProxyBridge_GetRules' 'ProxyBridge_IsRunning' \
+            'ProxyBridge_GetStats' 'ProxyBridge_GetUptime' \
+            'ProxyBridge_TestConnection' \
+            > build-dll/ProxyBridgeCore.def
           cat build-dll/ProxyBridgeCore.def
 
       - name: Build ProxyBridgeCore import library for Go cgo
