@@ -21,26 +21,131 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    runs-on: windows-latest
+  # ── Linux job: cross-compile DLL + Wails GUI for Windows ───────────────────
+  build-windows:
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Go
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Go
         uses: actions/setup-go@v5
         with:
           go-version: '1.23'
 
-      - name: Cache wails binary
-        id: cache-wails
+      - name: Install MinGW-w64 + NSIS (cross-compiler + packager for Windows)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mingw-w64 nsis
+
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/cmd/wails@v2
+
+      - name: Cache npm
         uses: actions/cache@v4
         with:
-          path: C:\Users\runneradmin\go\bin\wails.exe
-          key: wails-v2-2.8.1
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('gui-wails/proxybridge-gui/frontend/package-lock.json') }}
 
-      - name: Setup MSYS2
+      # --- Build ProxyBridgeCore.dll via MinGW cross-compile ---
+      - name: Build ProxyBridgeCore.dll (MinGW → Windows)
+        run: |
+          set -e
+          mkdir -p build-dll
+          x86_64-w64-mingw32-gcc -shared -O2 -flto -s -Wall \
+            -D_WIN32_WINNT=0x0601 -DPROXYBRIDGE_EXPORTS \
+            -IWindows/include \
+            Windows/src/ProxyBridge.c \
+            -L/usr/x86_64-w64-mingw32/lib -lws2_32 -liphlpapi \
+            -o build-dll/ProxyBridgeCore.dll
+          echo "=== DLL contents ==="
+          file build-dll/ProxyBridgeCore.dll
+          x86_64-w64-mingw32-gcc -shared -O2 -s \
+            -D_WIN32_WINNT=0x0601 -IWindows/include \
+            Windows/src/ProxyBridge.c \
+            -L/usr/x86_64-w64-mingw32/lib -lws2_32 -liphlpapi \
+            -o build-dll/ProxyBridgeCore.dll
+          ls -lh build-dll/
+
+      - name: Download WinDivert (for linking, not shipping)
+        run: |
+          curl -sL "https://github.com/basil00/Divert/releases/download/v2.2.2/WinDivert-2.2.2-A.zip" -o WinDivert.zip
+          unzip -q WinDivert.zip -d /tmp/WinDivert
+          cp /tmp/WinDivert/WinDivert-2.2.2-A/x64/*.sys build-dll/ 2>/dev/null || true
+          cp /tmp/WinDivert/WinDivert-2.2.2-A/x64/WinDivert.dll build-dll/ 2>/dev/null || true
+          ls -lh build-dll/
+
+      # --- Stage proxybridge package with real DLL for Wails build ---
+      - name: Stage proxybridge package for Wails cross-compile
+        run: |
+          PKG=gui-wails/proxybridge-gui/proxybridge
+          mkdir -p "$PKG/WinDivert/include" "$PKG"
+          cp build-dll/ProxyBridgeCore.dll "$PKG/"
+          cp build-dll/WinDivert.dll "$PKG/" 2>/dev/null || true
+          cp /tmp/WinDivert/WinDivert-2.2.2-A/x64/WinDivert.dll "$PKG/WinDivert.dll" 2>/dev/null || true
+          cp /tmp/WinDivert/WinDivert-2.2.2-A/x64/*.sys "$PKG/" 2>/dev/null || true
+          cp -r /tmp/WinDivert/WinDivert-2.2.2-A/include/* "$PKG/WinDivert/include/" 2>/dev/null || true
+          echo "=== proxybridge package ==="
+          find "$PKG" -type f | sort
+
+      - name: Build frontend
+        run: |
+          cd gui-wails/proxybridge-gui/frontend
+          npm ci
+          npm run build
+
+      - name: Build Wails GUI (Linux → Windows cross-compile)
+        env:
+          CC: x86_64-w64-mingw32-gcc
+          CGO_ENABLED: '1'
+          GOOS: windows
+          GOARCH: amd64
+        run: |
+          cd gui-wails/proxybridge-gui
+          wails build --platform windows/amd64 --outputname proxybridge-gui.exe
+
+      - name: Upload DLL artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: proxybridge-dll-win
+          path: build-dll/
+          retention-days: 1
+
+      - name: Upload exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: proxybridge-gui-exe
+          path: gui-wails/proxybridge-gui/build/bin/proxybridge-gui.exe
+          retention-days: 1
+
+  # ── Windows job: verify DLL, package zip, upload release ───────────────────
+  package:
+    runs-on: windows-latest
+    needs: build-windows
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download exe from Linux job
+        uses: actions/download-artifact@v4
+        with:
+          name: proxybridge-gui-exe
+          path: ./dist/
+
+      - name: Download DLL from Linux job
+        uses: actions/download-artifact@v4
+        with:
+          name: proxybridge-dll-win
+          path: ./dll-from-linux/
+
+      - name: Setup MSYS2 (for MinGW gcc — rebuild DLL with full WinDivert)
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
@@ -56,83 +161,56 @@ jobs:
           Invoke-WebRequest -Uri $url -OutFile "WinDivert.zip"
           Expand-Archive -Path "WinDivert.zip" -DestinationPath "C:\"
 
-      - name: Build ProxyBridgeCore.dll
+      - name: Verify exe from Linux build
+        run: |
+          $exe = "dist\proxybridge-gui.exe"
+          if (-not (Test-Path $exe)) { throw "exe not found!" }
+          Write-Host "  exe: $((Get-Item $exe).Length / 1MB) MB"
+
+      - name: Build fresh ProxyBridgeCore.dll on Windows
         run: |
           $env:Path = "C:\msys64\mingw64\bin;" + $env:Path
           $wdir = "D:\a\ProxyBridge\ProxyBridge\Windows"
           New-Item -ItemType Directory -Force -Path "$wdir\output" | Out-Null
-          gcc -shared -O2 -flto -s -Wall -D_WIN32_WINNT=0x0601 -DPROXYBRIDGE_EXPORTS -I"C:\WinDivert-2.2.2-A\include" "$wdir\src\ProxyBridge.c" -L"C:\WinDivert-2.2.2-A\x64" -lWinDivert -lws2_32 -liphlpapi -o "$wdir\output\ProxyBridgeCore.dll"
-          Write-Host "DLL built:"
+          gcc -shared -O2 -flto -s -Wall -D_WIN32_WINNT=0x0601 -DPROXYBRIDGE_EXPORTS `
+            -I"C:\WinDivert-2.2.2-A\include" `
+            "$wdir\src\ProxyBridge.c" `
+            -L"C:\WinDivert-2.2.2-A\x64" -lWinDivert -lws2_32 -liphlpapi `
+            -o "$wdir\output\ProxyBridgeCore.dll"
+          Write-Host "=== DLL from Windows build ==="
           Get-ChildItem "$wdir\output"
 
-      - name: Copy C core + WinDivert to wails project
+      - name: Package zip (exe from Linux + DLL from Windows + WinDivert)
         run: |
-          $pkg = "D:\a\ProxyBridge\ProxyBridge\gui-wails\proxybridge-gui\proxybridge"
-          New-Item -ItemType Directory -Force -Path $pkg | Out-Null
-          Copy-Item "D:\a\ProxyBridge\ProxyBridge\Windows\output\ProxyBridgeCore.dll" $pkg -Force
-          Copy-Item "C:\WinDivert-2.2.2-A\x64\WinDivert.dll" $pkg -Force
-          Get-ChildItem "C:\WinDivert-2.2.2-A\x64\*.sys" | ForEach-Object { Copy-Item $_.FullName $pkg -Force }
-          $hdrDst = "$pkg\WinDivert\include"
-          New-Item -ItemType Directory -Force -Path $hdrDst | Out-Null
-          Copy-Item "C:\WinDivert-2.2.2-A\include\*" $hdrDst -Force
-          Write-Host "Files in proxybridge package:"
-          Get-ChildItem $pkg | ForEach-Object { Write-Host "  $($_.Name)" }
-
-      - name: Install wails CLI
-        if: steps.cache-wails.outputs.cache-hit != 'true'
-        run: go install github.com/wailsapp/wails/cmd/wails@v2
-
-      - name: Build Wails GUI
-        env:
-          CGO_LDFLAGS: "-LD:/a/ProxyBridge/ProxyBridge/gui-wails/proxybridge-gui/proxybridge -lProxyBridgeCore -lWinDivert -lws2_32 -liphlpapi"
-          CGO_CFLAGS: "-ID:/a/ProxyBridge/ProxyBridge/gui-wails/proxybridge-gui/proxybridge/WinDivert/include"
-          GOOS: windows
-          GOARCH: amd64
-        run: |
-          $wails = "C:\Users\runneradmin\go\bin\wails.exe"
-          if (-not (Test-Path $wails)) {
-            $wails = Join-Path (go env GOPATH) "bin\wails.exe"
-          }
-          $env:Path = "C:\msys64\mingw64\bin;" + (Split-Path $wails) + ";" + $env:Path
-          cd D:\a\ProxyBridge\ProxyBridge\gui-wails\proxybridge-gui
-          & $wails build --platform windows/amd64 --windowsmanifest proxybridge-gui.manifest
-          Write-Host "Build output:"
-          Get-ChildItem build/bin | ForEach-Object { Write-Host "  $($_.Name) ($([math]::Round($_.Length/1MB,2)) MB)" }
-
-      - name: Package final output
-        run: |
-          $outDir = "D:\a\ProxyBridge\ProxyBridge\gui-wails\proxybridge-gui\build\bin"
-          $files = @(
-            "D:\a\ProxyBridge\ProxyBridge\Windows\output\ProxyBridgeCore.dll",
-            "C:\WinDivert-2.2.2-A\x64\WinDivert.dll"
-          )
-          foreach ($f in $files) {
-            if (Test-Path $f) {
-              Copy-Item $f $outDir -Force
-              Write-Host "  Copied $f"
-            }
-          }
+          $outDir = "D:\a\ProxyBridge\ProxyBridge\build"
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          # exe from Linux job
+          Copy-Item "dist\proxybridge-gui.exe" $outDir -Force
+          # DLL rebuilt on Windows (with real WinDivert)
+          Copy-Item "D:\a\ProxyBridge\ProxyBridge\Windows\output\ProxyBridgeCore.dll" $outDir -Force
+          # WinDivert runtime
+          Copy-Item "C:\WinDivert-2.2.2-A\x64\WinDivert.dll" $outDir -Force
           Get-ChildItem "C:\WinDivert-2.2.2-A\x64\*.sys" | ForEach-Object {
             Copy-Item $_.FullName $outDir -Force
-            Write-Host "  Copied $($_.Name)"
           }
-          Write-Host "`nFinal output directory:"
-          Get-ChildItem $outDir | ForEach-Object { Write-Host "  $($_.Name) ($([math]::Round($_.Length/1MB,2)) MB)" }
-
-      - name: Create zip
-        run: |
+          Write-Host "=== Final package contents ==="
+          Get-ChildItem $outDir | ForEach-Object {
+            Write-Host "  $($_.Name) ($($_.Length / 1MB) MB)"
+          }
+          # zip
           $zip = "D:\a\ProxyBridge\ProxyBridge\ProxyBridge-Windows.zip"
-          Compress-Archive -Path "D:\a\ProxyBridge\ProxyBridge\gui-wails\proxybridge-gui\build\bin\*" -DestinationPath $zip -Force
-          Write-Host "Zip created: $([math]::Round((Get-Item $zip).Length/1MB,2)) MB"
+          Compress-Archive -Path "$outDir\*" -DestinationPath $zip -Force
+          Write-Host "`nZip: $((Get-Item $zip).Length / 1MB) MB"
 
-      - name: Upload artifact
+      - name: Upload zip artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ProxyBridge-Wails-Windows
-          path: D:\a\ProxyBridge\ProxyBridge\gui-wails\proxybridge-gui\build\bin\
+          name: ProxyBridge-Windows-zip
+          path: D:\a\ProxyBridge\ProxyBridge\ProxyBridge-Windows.zip
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
+        if: github.event_name == 'workflow_dispatch'
         with:
           tag_name: ${{ inputs.tag }}
           name: "ProxyBridge Wails ${{ inputs.tag }}"
