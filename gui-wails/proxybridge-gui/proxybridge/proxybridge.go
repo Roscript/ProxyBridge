@@ -4,8 +4,8 @@
 // On Windows, proxybridge_windows.go overrides the API functions.
 // Types are in types.go (shared, no build tag).
 
-//go:build !windows && !linux
-// +build !windows,!linux
+//go:build !windows
+// +build !windows
 package proxybridge
 
 import (
