@@ -8,6 +8,7 @@ import { Rules } from './pages/Rules';
 import { Connections } from './pages/Connections';
 import { Settings } from './pages/Settings';
 import type { ProxyRule, ConnectionLog, AppStats, ProxyConfig } from './types';
+import { Start, Stop, IsRunning } from '../wailsjs/go/main/App';
 
 // Pre-fill template when adding rule from connection
 export interface RuleTemplate {
@@ -87,9 +88,25 @@ export default function App() {
   // ── Running ──────────────────────────────────────────────────────────────
 
   function handleToggleRunning() {
-    setIsRunning(!isRunning);
     if (!isRunning) {
-      setConnections([]);
+      Start().then((ok) => {
+        if (ok) {
+          setIsRunning(true);
+        } else {
+          console.error('Failed to start ProxyBridge');
+        }
+      }).catch((err) => {
+        console.error('Start error:', err);
+      });
+    } else {
+      Stop().then((ok) => {
+        if (ok) {
+          setIsRunning(false);
+          setConnections([]);
+        }
+      }).catch((err) => {
+        console.error('Stop error:', err);
+      });
     }
   }
 
