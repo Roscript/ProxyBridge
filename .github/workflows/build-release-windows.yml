@@ -57,11 +57,11 @@ jobs:
         run: |
           curl -sL "https://github.com/basil00/Divert/releases/download/v2.2.2/WinDivert-2.2.2-A.zip" -o /tmp/WinDivert.zip
           unzip -q /tmp/WinDivert.zip -d /tmp/WinDivert
-          ls /tmp/WinDivert/WinDivert-2.2.2-A/
+          ls /tmp/WinDivert/WinDivert-2.2.2-A/x64/
 
       - name: Build WinDivert import library for MinGW
         run: |
-          # Create import library (.a) from WinDivert.dll so MinGW can link
+          # Generate MinGW import library (.a) from WinDivert.dll
           WIN=/tmp/WinDivert/WinDivert-2.2.2-A
           x86_64-w64-mingw32-dlltool \
             -d "$WIN/x64/WinDivert.def" \
@@ -75,28 +75,55 @@ jobs:
           set -e
           mkdir -p build-dll
           WIN=/tmp/WinDivert/WinDivert-2.2.2-A
-          # Build DLL (links against WinDivert dynamically)
+          # Cross-compile ProxyBridgeCore.dll (dynamic link to WinDivert)
           x86_64-w64-mingw32-gcc -shared -O2 -s -Wall \
             -D_WIN32_WINNT=0x0601 -DPROXYBRIDGE_EXPORTS \
             -I"$WIN/include" \
-            -IWindows/include \
             Windows/src/ProxyBridge.c \
             -L/usr/x86_64-w64-mingw32/lib -lws2_32 -liphlpapi \
             -o build-dll/ProxyBridgeCore.dll
-          echo "=== DLL ==="
+          echo "=== ProxyBridgeCore.dll ==="
           file build-dll/ProxyBridgeCore.dll
           ls -lh build-dll/
 
-      # --- Stage proxybridge package with real DLL for Wails build ---
+      - name: Build ProxyBridgeCore import library for Go cgo
+        run: |
+          # Generate MinGW import library from the DLL we just built
+          # First create a .def file from the DLL exports
+          # Usegendef (from mingw-w64) to generate .def, then dlltool
+          mkdir -p build-dll
+          x86_64-w64-mingw32gendef build-dll/ProxyBridgeCore.dll 2>/dev/null || true
+          if [ -f build-dll/ProxyBridgeCore.def ]; then
+            x86_64-w64-mingw32-dlltool \
+              -d build-dll/ProxyBridgeCore.def \
+              -l build-dll/libProxyBridgeCore.a \
+              -D ProxyBridgeCore.dll
+            ls -lh build-dll/libProxyBridgeCore.a
+          else
+            # Fallback: create minimal import library
+            echo "EXPORTS" > /tmp/pb.def
+            x86_64-w64-mingw32-dlltool \
+              -d /tmp/pb.def \
+              -l build-dll/libProxyBridgeCore.a \
+              -D ProxyBridgeCore.dll || true
+            ls -lh build-dll/
+          fi
+
+      # --- Stage proxybridge package with DLL + import libs for Wails ---
       - name: Stage proxybridge package for Wails cross-compile
         run: |
           PKG=gui-wails/proxybridge-gui/proxybridge
+          WIN=/tmp/WinDivert/WinDivert-2.2.2-A
           mkdir -p "$PKG/WinDivert/include" "$PKG"
+          # Actual DLL and import library for cgo linking
           cp build-dll/ProxyBridgeCore.dll "$PKG/"
-          cp build-dll/WinDivert.dll "$PKG/" 2>/dev/null || true
-          cp /tmp/WinDivert/WinDivert-2.2.2-A/x64/WinDivert.dll "$PKG/WinDivert.dll" 2>/dev/null || true
-          cp /tmp/WinDivert/WinDivert-2.2.2-A/x64/*.sys "$PKG/" 2>/dev/null || true
-          cp -r /tmp/WinDivert/WinDivert-2.2.2-A/include/* "$PKG/WinDivert/include/" 2>/dev/null || true
+          cp /tmp/libWinDivert.a "$PKG/libWinDivert.a"
+          # WinDivert runtime files (not for linking, for shipping)
+          cp "$WIN/x64/WinDivert.dll" "$PKG/"
+          cp "$WIN/x64/WinDivert32.sys" "$PKG/" 2>/dev/null || true
+          cp "$WIN/x64/WinDivert64.sys" "$PKG/" 2>/dev/null || true
+          # Headers
+          cp -r "$WIN/include/"* "$PKG/WinDivert/include/" 2>/dev/null || true
           echo "=== proxybridge package ==="
           find "$PKG" -type f | sort
 
@@ -112,6 +139,8 @@ jobs:
           CGO_ENABLED: '1'
           GOOS: windows
           GOARCH: amd64
+          CGO_LDFLAGS: '-LD:/a/ProxyBridge/ProxyBridge/gui-wails/proxybridge-gui/proxybridge -lProxyBridgeCore -lWinDivert -lws2_32 -liphlpapi'
+          CGO_CFLAGS: '-ID:/a/ProxyBridge/ProxyBridge/gui-wails/proxybridge-gui/proxybridge/WinDivert/include'
         run: |
           cd gui-wails/proxybridge-gui
           wails build --platform windows/amd64 --outputname proxybridge-gui.exe
