@@ -53,32 +53,38 @@ jobs:
           path: ~/.npm
           key: npm-${{ runner.os }}-${{ hashFiles('gui-wails/proxybridge-gui/frontend/package-lock.json') }}
 
+      - name: Download WinDivert (for linking + headers)
+        run: |
+          curl -sL "https://github.com/basil00/Divert/releases/download/v2.2.2/WinDivert-2.2.2-A.zip" -o /tmp/WinDivert.zip
+          unzip -q /tmp/WinDivert.zip -d /tmp/WinDivert
+          ls /tmp/WinDivert/WinDivert-2.2.2-A/
+
+      - name: Build WinDivert import library for MinGW
+        run: |
+          # Create import library (.a) from WinDivert.dll so MinGW can link
+          WIN=/tmp/WinDivert/WinDivert-2.2.2-A
+          x86_64-w64-mingw32-dlltool \
+            -d "$WIN/x64/WinDivert.def" \
+            -l /tmp/libWinDivert.a \
+            -D WinDivert.dll
+          ls -lh /tmp/libWinDivert.a
+
       # --- Build ProxyBridgeCore.dll via MinGW cross-compile ---
       - name: Build ProxyBridgeCore.dll (MinGW → Windows)
         run: |
           set -e
           mkdir -p build-dll
-          x86_64-w64-mingw32-gcc -shared -O2 -flto -s -Wall \
+          WIN=/tmp/WinDivert/WinDivert-2.2.2-A
+          # Build DLL (links against WinDivert dynamically)
+          x86_64-w64-mingw32-gcc -shared -O2 -s -Wall \
             -D_WIN32_WINNT=0x0601 -DPROXYBRIDGE_EXPORTS \
+            -I"$WIN/include" \
             -IWindows/include \
             Windows/src/ProxyBridge.c \
             -L/usr/x86_64-w64-mingw32/lib -lws2_32 -liphlpapi \
             -o build-dll/ProxyBridgeCore.dll
-          echo "=== DLL contents ==="
+          echo "=== DLL ==="
           file build-dll/ProxyBridgeCore.dll
-          x86_64-w64-mingw32-gcc -shared -O2 -s \
-            -D_WIN32_WINNT=0x0601 -IWindows/include \
-            Windows/src/ProxyBridge.c \
-            -L/usr/x86_64-w64-mingw32/lib -lws2_32 -liphlpapi \
-            -o build-dll/ProxyBridgeCore.dll
-          ls -lh build-dll/
-
-      - name: Download WinDivert (for linking, not shipping)
-        run: |
-          curl -sL "https://github.com/basil00/Divert/releases/download/v2.2.2/WinDivert-2.2.2-A.zip" -o WinDivert.zip
-          unzip -q WinDivert.zip -d /tmp/WinDivert
-          cp /tmp/WinDivert/WinDivert-2.2.2-A/x64/*.sys build-dll/ 2>/dev/null || true
-          cp /tmp/WinDivert/WinDivert-2.2.2-A/x64/WinDivert.dll build-dll/ 2>/dev/null || true
           ls -lh build-dll/
 
       # --- Stage proxybridge package with real DLL for Wails build ---
