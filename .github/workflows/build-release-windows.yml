@@ -152,11 +152,16 @@ jobs:
           update: true
           install: mingw-w64-x86_64-gcc mingw-w64-x86_64-go
 
-      - name: Add MSYS2 to PATH
-        run: echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Add MSYS2 and Go to PATH
+        run: |
+          $gobin = (go env GOPATH) + "\bin"
+          $env:PATH = "C:\msys64\mingw64\bin;$gobin;$env:PATH"
+          echo $env:PATH | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Verify Go
-        run: go version
+      - name: Verify Go and wails
+        run: |
+          go version
+          & wails version
 
       - name: Download WinDivert
         run: |
