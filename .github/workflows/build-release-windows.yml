@@ -59,13 +59,13 @@ jobs:
 
     - name: Copy C core + WinDivert DLLs to wails project
       run: |
-        # ProxyBridgeCore.dll to proxybridge package dir (where cgo LDFLAGS -L${SRCDIR} will find it)
+        # ProxyBridgeCore.dll to proxybridge package dir
         Copy-Item "Windows/output/ProxyBridgeCore.dll" -Destination "gui-wails/proxybridge-gui/proxybridge/" -Force
-        # WinDivert DLL to proxybridge package dir
+        # WinDivert DLL + drivers to proxybridge package dir
         Copy-Item "C:\WinDivert-2.2.2-A\x64\WinDivert.dll" -Destination "gui-wails/proxybridge-gui/proxybridge/" -Force
-        # WinDivert sys drivers to proxybridge package dir
-        Copy-Item "C:\WinDivert-2.2.2-A\x64\WinDivert.sys" -Destination "gui-wails/proxybridge-gui/proxybridge/" -Force
-        Copy-Item "C:\WinDivert-2.2.2-A\x64\WinDivert32.sys" -Destination "gui-wails/proxybridge-gui/proxybridge/" -Force
+        Get-ChildItem "C:\WinDivert-2.2.2-A\x64\*.sys" | ForEach-Object {
+          Copy-Item $_.FullName -Destination "gui-wails/proxybridge-gui/proxybridge/" -Force
+        }
         # WinDivert headers to proxybridge package dir
         New-Item -ItemType Directory -Force -Path "gui-wails/proxybridge-gui/proxybridge/WinDivert/include" | Out-Null
         Copy-Item "C:\WinDivert-2.2.2-A\include\*" -Destination "gui-wails/proxybridge-gui/proxybridge/WinDivert/include/" -Force
@@ -90,17 +90,20 @@ jobs:
     - name: Copy all required files into final output
       run: |
         $outDir = "gui-wails/proxybridge-gui/build/bin"
+        New-Item -ItemType Directory -Force -Path $outDir | Out-Null
         $files = @(
           "Windows/output/ProxyBridgeCore.dll",
-          "Windows/output/WinDivert.dll",
-          "Windows/output/WinDivert64.sys"
+          "C:\WinDivert-2.2.2-A\x64\WinDivert.dll"
         )
-        New-Item -ItemType Directory -Force -Path $outDir | Out-Null
         foreach ($f in $files) {
           if (Test-Path $f) {
             Copy-Item $f -Destination $outDir -Force
-            Write-Host "  Copied $f -> $outDir"
+            Write-Host "  Copied $f"
           }
+        }
+        Get-ChildItem "C:\WinDivert-2.2.2-A\x64\*.sys" | ForEach-Object {
+          Copy-Item $_.FullName -Destination $outDir -Force
+          Write-Host "  Copied $($_.Name)"
         }
         Write-Host "`nFinal output:"
         Get-ChildItem $outDir | ForEach-Object {
