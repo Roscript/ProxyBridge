@@ -46,6 +46,7 @@ jobs:
       run: |
         $env:Path = "C:\msys64\mingw64\bin;$env:Path"
         $wdir = "D:\a\ProxyBridge\ProxyBridge\Windows"
+        New-Item -ItemType Directory -Force -Path "$wdir\output" | Out-Null
         gcc -shared -O2 -flto -s -Wall `
           -D_WIN32_WINNT=0x0601 -DPROXYBRIDGE_EXPORTS `
           -I"C:\WinDivert-2.2.2-A\include" `
