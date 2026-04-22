@@ -33,6 +33,13 @@ jobs:
         with:
           go-version: '1.23'
 
+      - name: Cache wails binary
+        id: cache-wails
+        uses: actions/cache@v4
+        with:
+          path: C:\Users\runneradmin\go\bin\wails.exe
+          key: wails-v2-2.8.1
+
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
         with:
@@ -71,23 +78,26 @@ jobs:
           Write-Host "Files in proxybridge package:"
           Get-ChildItem $pkg | ForEach-Object { Write-Host "  $($_.Name)" }
 
-      - name: Build Wails GUI (bash)
+      - name: Install wails CLI
+        if: steps.cache-wails.outputs.cache-hit != 'true'
+        run: go install github.com/wailsapp/wails/cmd/wails@v2
+
+      - name: Build Wails GUI
         env:
           CGO_LDFLAGS: "-LD:/a/ProxyBridge/ProxyBridge/gui-wails/proxybridge-gui/proxybridge -lProxyBridgeCore -lWinDivert -lws2_32 -liphlpapi"
           CGO_CFLAGS: "-ID:/a/ProxyBridge/ProxyBridge/gui-wails/proxybridge-gui/proxybridge/WinDivert/include"
           GOOS: windows
           GOARCH: amd64
         run: |
-          # Run via MSYS2 bash so wails (Go) sees correct MSYS2/MinGW environment
-          bash -lc "
-            export PATH=\"/c/msys64/mingw64/bin:$GOPATH/bin:$PATH\"
-            export CGO_LDFLAGS='-LD:/a/ProxyBridge/ProxyBridge/gui-wails/proxybridge-gui/proxybridge -lProxyBridgeCore -lWinDivert -lws2_32 -liphlpapi'
-            export CGO_CFLAGS='-ID:/a/ProxyBridge/ProxyBridge/gui-wails/proxybridge-gui/proxybridge/WinDivert/include'
-            cd /d/a/ProxyBridge/ProxyBridge/gui-wails/proxybridge-gui
-            go run github.com/wailsapp/wails/cmd/wails@v2 build --platform windows/amd64 --windowsmanifest proxybridge-gui.manifest
-          "
-          echo "Build output:"
-          ls -lh gui-wails/proxybridge-gui/build/bin/ 2>/dev/null || dir build\\bin
+          $wails = "C:\Users\runneradmin\go\bin\wails.exe"
+          if (-not (Test-Path $wails)) {
+            $wails = Join-Path (go env GOPATH) "bin\wails.exe"
+          }
+          $env:Path = "C:\msys64\mingw64\bin;" + (Split-Path $wails) + ";" + $env:Path
+          cd D:\a\ProxyBridge\ProxyBridge\gui-wails\proxybridge-gui
+          & $wails build --platform windows/amd64 --windowsmanifest proxybridge-gui.manifest
+          Write-Host "Build output:"
+          Get-ChildItem build/bin | ForEach-Object { Write-Host "  $($_.Name) ($([math]::Round($_.Length/1MB,2)) MB)" }
 
       - name: Package final output
         run: |
