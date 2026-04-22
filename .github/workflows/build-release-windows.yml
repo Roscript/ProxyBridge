@@ -70,11 +70,11 @@ jobs:
 
       - name: Build Wails GUI
         env:
-          CGO_LDFLAGS: "-LD:\a\ProxyBridge\ProxyBridge\gui-wails\proxybridge-gui\proxybridge -lProxyBridgeCore -lWinDivert -lws2_32 -liphlpapi"
-          CGO_CFLAGS: "-ID:\a\ProxyBridge\ProxyBridge\gui-wails\proxybridge-gui\proxybridge\WinDivert\include"
+          CGO_LDFLAGS: "-LD:/a/ProxyBridge/ProxyBridge/gui-wails/proxybridge-gui/proxybridge -lProxyBridgeCore -lWinDivert -lws2_32 -liphlpapi"
+          CGO_CFLAGS: "-ID:/a/ProxyBridge/ProxyBridge/gui-wails/proxybridge-gui/proxybridge/WinDivert/include"
           GOOS: windows
           GOARCH: amd64
-          Path: "C:\msys64\mingw64\bin;C:\Users\runneradmin\go\bin;C:\Windows\System32;$env:Path"
+          Path: "C:/msys64/mingw64/bin;C:/Users/runneradmin/go/bin;C:/Windows/System32;$env:Path"
         run: |
           cd D:\a\ProxyBridge\ProxyBridge\gui-wails\proxybridge-gui
           wails build --platform windows/amd64
