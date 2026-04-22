@@ -38,19 +38,33 @@ jobs:
           unzip -q /tmp/WinDivert.zip -d /tmp/WinDivert
           ls /tmp/WinDivert/WinDivert-2.2.2-A/x64/
 
-      - name: Create WinDivert.def (manual, from header)
+      - name: Create WinDivert.def (from real DLL using gendef)
         run: |
-          printf '%s\n' 'LIBRARY WinDivert.dll' 'EXPORTS' \
-            'WinDivertOpen' 'WinDivertClose' 'WinDivertSend' 'WinDivertRecv' \
-            'WinDivertRecvEx' 'WinDivertSendEx' 'WinDivertSetParam' \
-            'WinDivertGetParam' 'WinDivertHelperInit' 'WinDivertHelperHashPacket' \
-            'WinDivertHelperParsePacket' 'WinDivertHelperUnparsePacket' \
-            'WinDivertHelperCheckPacket' 'WinDivertHelperDecrypt' \
-            'WinDivertHelperEncrypt' 'WinDivertHelperExtractTLV' \
-            'WinDivertHelperInjectTLV' 'WinDivertHelperCalcChecksum' \
-            'WinDivertHelperNTOH' 'WinDivertHelperHTON' \
-            > /tmp/windivert.def
-          echo "=== WinDivert.def created ==="
+          # Use gendef to extract real exports from WinDivert.dll
+          # (dlltool can also parse the PE DLL directly on Linux)
+          gendef /tmp/WinDivert/WinDivert-2.2.2-A/x64/WinDivert.dll 2>/dev/null || true
+          if [ -f /tmp/WinDivert/WinDivert-2.2.2-A/x64/WinDivert.def ]; then
+            mv /tmp/WinDivert/WinDivert-2.2.2-A/x64/WinDivert.def /tmp/windivert.def
+          else
+            echo "gendef failed, using fallback def"
+            printf '%s\n' 'LIBRARY WinDivert.dll' 'EXPORTS' \
+              'WinDivertOpen' 'WinDivertClose' 'WinDivertShutdown' \
+              'WinDivertRecv' 'WinDivertRecvEx' 'WinDivertSend' 'WinDivertSendEx' \
+              'WinDivertSetParam' 'WinDivertGetParam' \
+              'WinDivertHelperHashPacket' 'WinDivertHelperParsePacket' \
+              'WinDivertHelperCalcChecksums' 'WinDivertHelperDecrementTTL' \
+              'WinDivertHelperCompileFilter' 'WinDivertHelperEvalFilter' \
+              'WinDivertHelperFormatFilter' \
+              'WinDivertHelperParseIPv4Address' 'WinDivertHelperParseIPv6Address' \
+              'WinDivertHelperFormatIPv4Address' 'WinDivertHelperFormatIPv6Address' \
+              'WinDivertHelperNtohs' 'WinDivertHelperHtons' \
+              'WinDivertHelperNtohl' 'WinDivertHelperHtonl' \
+              'WinDivertHelperNtohll' 'WinDivertHelperHtonll' \
+              'WinDivertHelperNtohIPv6Address' 'WinDivertHelperHtonIPv6Address' \
+              'WinDivertHelperNtohIpv6Address' 'WinDivertHelperHtonIpv6Address' \
+              > /tmp/windivert.def
+          fi
+          echo "=== WinDivert.def ==="
           cat /tmp/windivert.def
 
       - name: Build WinDivert import library
@@ -151,21 +165,24 @@ jobs:
 
       - name: Copy DLL to proxybridge package
         run: |
-          Copy-Item "dll\ProxyBridgeCore.dll" "gui-wails\proxybridge-gui\proxybridge\" -Force
-          Copy-Item "dll\libProxyBridgeCore.a" "gui-wails\proxybridge-gui\proxybridge\" -Force
-          Copy-Item "dll\WinDivert.dll" "gui-wails\proxybridge-gui\proxybridge\" -Force
-          New-Item -ItemType Directory -Force -Path "gui-wails\proxybridge-gui\proxybridge\WinDivert\include" | Out-Null
-          Copy-Item "C:\WinDivert-2.2.2-A\include\*" "gui-wails\proxybridge-gui\proxybridge\WinDivert\include\" -Force
-          Get-ChildItem "gui-wails\proxybridge-gui\proxybridge" -Recurse | Select-Object FullName
+          $pb = "${{ github.workspace }}/gui-wails/proxybridge-gui/proxybridge"
+          New-Item -ItemType Directory -Force -Path $pb | Out-Null
+          Copy-Item "dll\ProxyBridgeCore.dll" $pb -Force
+          Copy-Item "dll\libProxyBridgeCore.a" $pb -Force
+          Copy-Item "dll\libWinDivert.a" $pb -Force
+          Copy-Item "dll\WinDivert.dll" $pb -Force
+          New-Item -ItemType Directory -Force -Path "$pb\WinDivert\include" | Out-Null
+          Copy-Item "C:\WinDivert-2.2.2-A\include\*" "$pb\WinDivert\include\" -Force
+          Get-ChildItem $pb -Recurse | Select-Object FullName
 
       - name: Build Wails GUI (Windows native)
         env:
           CGO_ENABLED: '1'
           CC: gcc
-          CGO_LDFLAGS: -L${{ github.workspace }}/gui-wails/proxybridge-gui/proxybridge -lProxyBridgeCore -lWinDivert -lws2_32 -liphlpapi
-          CGO_CFLAGS: -I${{ github.workspace }}/gui-wails/proxybridge-gui/proxybridge/WinDivert/include
+          CGO_LDFLAGS: -L. -lProxyBridgeCore -lWinDivert -lws2_32 -liphlpapi
+          CGO_CFLAGS: -I./WinDivert/include
         run: |
-          cd gui-wails\proxybridge-gui
+          cd gui-wails/proxybridge-gui/proxybridge
           wails build --platform windows/amd64 --outputname proxybridge-gui.exe
 
       - name: Verify exe
