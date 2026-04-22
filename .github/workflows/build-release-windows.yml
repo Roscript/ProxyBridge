@@ -139,3 +139,4 @@ jobs:
         name: ProxyBridge-Wails-Windows-${{ inputs.tag }}
         path: gui-wails/proxybridge-gui/build/bin/
         retention-days: 30
+
