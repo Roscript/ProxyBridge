@@ -61,10 +61,12 @@ jobs:
 
       - name: Build WinDivert import library for MinGW
         run: |
-          # Generate MinGW import library (.a) from WinDivert.dll
+          # WinDivert.zip has WinDivert.dll + WinDivert.lib but no .def
+          # Use gendef (from mingw-w64) to generate .def from the DLL, then dlltool
           WIN=/tmp/WinDivert/WinDivert-2.2.2-A
+          cd /tmp && x86_64-w64-mingw32-gendef "$WIN/x64/WinDivert.dll"
           x86_64-w64-mingw32-dlltool \
-            -d "$WIN/x64/WinDivert.def" \
+            -d /tmp/WinDivert.def \
             -l /tmp/libWinDivert.a \
             -D WinDivert.dll
           ls -lh /tmp/libWinDivert.a
