@@ -119,8 +119,8 @@ jobs:
           mkdir -p dll-staging
           cp build-dll/ProxyBridgeCore.dll dll-staging/
           cp build-dll/libProxyBridgeCore.a dll-staging/
-          cp build-dll/WinDivert.dll dll-staging/
-          cp build-dll/WinDivert.sys dll-staging/
+          cp /tmp/WinDivert/WinDivert-2.2.2-A/x64/WinDivert.dll dll-staging/
+          cp /tmp/WinDivert/WinDivert-2.2.2-A/x64/WinDivert.sys dll-staging/
           cp /tmp/libWinDivert.a dll-staging/
 
       - name: Upload DLL artifact
