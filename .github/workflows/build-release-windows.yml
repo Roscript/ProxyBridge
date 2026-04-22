@@ -71,7 +71,7 @@ jobs:
         CGO_CFLAGS: "-I${SRCDIR}/WinDivert/include"
         GOOS: windows
         GOARCH: amd64
-        Path: "C:\msys64\mingw64\bin;C:\Windows\System32;$env:Path"
+        Path: 'C:\msys64\mingw64\bin;C:\Windows\System32;$env:Path'
       run: |
         cd gui-wails/proxybridge-gui
         wails build --platform windows/amd64
