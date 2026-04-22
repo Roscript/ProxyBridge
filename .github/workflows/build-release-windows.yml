@@ -72,13 +72,18 @@ jobs:
         Write-Host "Files in proxybridge package:"
         Get-ChildItem "gui-wails/proxybridge-gui/proxybridge/" | ForEach-Object { Write-Host "  $($_.Name)" }
 
+    - name: Install wails CLI
+      run: |
+        go install github.com/wailsapp/wails/cmd/wails@v2
+        Write-Host "Wails installed: $(go env GOPATH)/bin/wails.exe"
+
     - name: Build Wails GUI (Windows, with real ProxyBridge DLL)
       env:
         CGO_LDFLAGS: "-L${SRCDIR} -lProxyBridgeCore -lWinDivert -lws2_32 -liphlpapi"
         CGO_CFLAGS: "-I${SRCDIR}/WinDivert/include"
         GOOS: windows
         GOARCH: amd64
-        Path: 'C:\msys64\mingw64\bin;C:\Windows\System32;$env:Path'
+        Path: "C:\msys64\mingw64\bin;C:\Users\runneradmin\go\bin;C:\Windows\System32;$env:Path"
       run: |
         cd gui-wails/proxybridge-gui
         wails build --platform windows/amd64
